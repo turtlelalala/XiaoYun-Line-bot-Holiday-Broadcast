@@ -1,0 +1,81 @@
+name: Xiaoyun Holiday Broadcast
+
+on:
+  schedule:
+    # 這是我們的「節日鬧鐘」列表。使用 UTC 時間。
+    # (UTC+8 的 早上 9:00 是 UTC 01:00)
+    
+    # --- 固定日期節日 ---
+    # 貓之日 (每年 2月22日)
+    - cron: '0 1 22 2 *' 
+    # 聖誕節 (每年 12月25日)
+    - cron: '0 1 25 12 *'
+    # 跨年夜 (每年 12月31日)
+    - cron: '0 1 31 12 *'
+    # 新年第一天 (每年 1月1日)
+    - cron: '0 1 1 1 *'
+    
+    # --- 浮動日期節日 (範例 - 每年需手動更新) ---
+    # 2025 農曆除夕 (2025年1月28日)
+    - cron: '0 1 28 1 *'
+
+  workflow_dispatch:
+    inputs:
+      event_override:
+        description: '手動測試：輸入節日名稱'
+        required: true
+        default: '一個快樂的測試日'
+
+jobs:
+  broadcast-holiday-message:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Determine Event and Run Script
+        env:
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          EVENT_NAME_TO_RUN=""
+          # 檢查是否為手動觸發
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            EVENT_NAME_TO_RUN="${{ github.event.inputs.event_override }}"
+          else
+            # 根據當前 UTC 日期判斷節日
+            UTC_DATE=$(date -u +'%m-%d')
+            UTC_FULL_DATE=$(date -u +'%Y-%m-%d')
+            
+            if [[ "$UTC_DATE" == '02-22' ]]; then
+              EVENT_NAME_TO_RUN="貓之日"
+            elif [[ "$UTC_DATE" == '12-25' ]]; then
+              EVENT_NAME_TO_RUN="聖誕節"
+            elif [[ "$UTC_DATE" == '12-31' ]]; then
+              EVENT_NAME_TO_RUN="跨年夜"
+            elif [[ "$UTC_DATE" == '01-01' ]]; then
+              EVENT_NAME_TO_RUN="元旦新年"
+            elif [[ "$UTC_FULL_DATE" == '2025-01-28' ]]; then
+              EVENT_NAME_TO_RUN="農曆除夕夜"
+            fi
+          fi
+
+          if [[ -n "$EVENT_NAME_TO_RUN" ]]; then
+            echo "🎉 Detected event: $EVENT_NAME_TO_RUN"
+            # 將事件名稱作為環境變數傳遞給 Python 腳本
+            EVENT_NAME="$EVENT_NAME_TO_RUN" python holiday_broadcast.py
+          else
+            echo "No scheduled event for today. Skipping."
+          fi
